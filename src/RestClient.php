@@ -26,22 +26,30 @@ use Positivezero\Rest\RestClientException;
  * $response = $client->put($endpoint, $data);
  */
 class RestClient implements \Iterator, \ArrayAccess {
-	/** @const DEBUG enable debug to screen */
-	const DEBUG = false;
-	/** @const VERBOSE if is debug enabled, you can choose verbose level 0=less|1=more */
-	const VERBOSE = 0;
+	/** @var debug enable debug to screen */
+	public $debug;
+
+	/** @var verbose if is debug enabled, you can choose verbose level false=less|true=more */
+	public $verbose;
+
 	/** @var array  */
 	public $options;
+
 	/** @var object cURL resource */
 	public $handle;
+
 	/** @var string $response body*/
 	public $response;
+
 	/** @var array $headers parsed response header object*/
 	public $headers;
+
 	/** @var array $info response object */
 	public $info;
+
 	/** @var string $error response error string */
 	public $error;
+
 	/** @var mixed $decoded_response */
 	public $decoded_response;
 
@@ -67,6 +75,8 @@ class RestClient implements \Iterator, \ArrayAccess {
 	 */
 	public function __construct($options=array()){
 		$default_options = array(
+			'debug' => false,
+			'verbose' => false,
 			'headers' => array(),
 			'parameters' => array(),
 			'curl_options' => array(),
@@ -82,10 +92,13 @@ class RestClient implements \Iterator, \ArrayAccess {
 			'password' => NULL
 		);
 
-		$this->options = array_merge($default_options, $options);
-		if(array_key_exists('decoders', $options))
-			$this->options['decoders'] = array_merge(
-				$default_options['decoders'], $options['decoders']);
+		$options = array_merge($default_options, $options);
+		$this->debug = $options['debug'];
+		$this->verbose = $options['verbose'];
+		unset( $options['debug'] );
+		unset( $options['verbose'] );
+
+		$this->options = $options;
 	}
 
 	public function set_option($key, $value){
@@ -204,7 +217,7 @@ class RestClient implements \Iterator, \ArrayAccess {
 	 */
 	protected  function execute($url, $method='GET', $parameters=array(), $headers=array()){
 		$this->debugCounter = 0;
-		if (self::DEBUG) $this->debug(0, 'executing curl: ' . $method . ' ' . $this->options['base_url'] . '/' . $url);
+		if ($this->debug) $this->debug(0, 'executing curl: ' . $method . ' ' . $this->options['base_url'] . '/' . $url);
 		$client = clone $this;
 		$client->url = $url;
 		$client->handle = curl_init();
@@ -255,7 +268,7 @@ class RestClient implements \Iterator, \ArrayAccess {
 			$curlopt = array_merge($curlopt, $client->options['curl_options']);
 		}
 
-		if (self::DEBUG) $this->debug(0,'curl options', $curlopt);
+		if ($this->debug) $this->debug(0,'curl options', $curlopt);
 		$curloptparsed = array();
 		foreach($curlopt as $key => $value) {
 			$curloptparsed[constant($key)] = $value;
@@ -269,7 +282,7 @@ class RestClient implements \Iterator, \ArrayAccess {
 		curl_close($client->handle);
 
 		$client->decode_response();
-		if (self::DEBUG) $this->debug(0,'decoded response', $client->decoded_response);
+		if ($this->debug) $this->debug(0,'decoded response', $client->decoded_response);
 
 		if ($client->info->http_code !== 200) {
 			$message = '';
@@ -289,11 +302,22 @@ class RestClient implements \Iterator, \ArrayAccess {
 	}
 
 	public function format_query($parameters, $primary='=', $secondary='&'){
-		$query = "";
+		$queryParts = [];
 		foreach($parameters as $key => $value){
-			$pair = array(urlencode($key), urlencode($value));
-			$query .= implode($primary, $pair) . $secondary;
+			if(is_array($value)) { // -- recurse
+				$subParameters = [];
+				foreach($value as $subKey => $subValue) {
+					$newKey                 = $key.'['.$subKey.']';
+					$subParameters[$newKey] = $subValue;
+					$queryParts[]           = $this->format_query($subParameters, $primary, $secondary);
+				}
+			} else {
+				$pair         = array(urlencode($key), urlencode($value));
+				$queryParts[] = implode($primary, $pair);
+			}
 		}
+		$query = implode($secondary, $queryParts);
+
 		return rtrim($query, $secondary);
 	}
 
@@ -301,11 +325,11 @@ class RestClient implements \Iterator, \ArrayAccess {
 		$headers = null;
 		$parts = explode("\r\n\r\n", $response);
 		$body = '';
-		if (self::DEBUG) $this->debug(1, 'curl response', $response);
+		if ($this->debug) $this->debug(1, 'curl response', $response);
 		foreach($parts as $index => $part) {
-			if (self::DEBUG) $this->debug(1, 'parsing part');
+			if ($this->debug) $this->debug(1, 'parsing part');
 			if (preg_match('/^http/i',$part)) {
-				if (self::DEBUG) $this->debug(1, 'part ' . $index . ' is header', $part);
+				if ($this->debug) $this->debug(1, 'part ' . $index . ' is header', $part);
 				$http_ver = strtok($part, "\n");
 				if (isset($headers)) {
 					if (!array_key_exists('previous', $headers)) {
@@ -331,11 +355,11 @@ class RestClient implements \Iterator, \ArrayAccess {
 					}
 				}
 			} else {
-				if (self::DEBUG) $this->debug(1, 'part ' . $index . ' is body', $part);
+				if ($this->debug) $this->debug(1, 'part ' . $index . ' is body', $part);
 				$body = $part;
 			}
 		}
-		if (self::DEBUG) $this->debug(0, 'decoded header', $headers);
+		if ($this->debug) $this->debug(0, 'decoded header', $headers);
 		$this->headers = (object) $headers;
 		$this->response = $body;
 	}
@@ -379,7 +403,7 @@ class RestClient implements \Iterator, \ArrayAccess {
 	private function debug()
 	{
 		$args = func_get_args();
-		if ($args[0] > self::VERBOSE ) return;
+		if ($args[0] > $this->verbose ) return;
 		if (func_num_args()>2) {
 			print str_pad( '=== ' . strtoupper($args[1]) . ' =', 80, '=', STR_PAD_RIGHT) . "\n";
 			if (is_array($args[2]))  {
