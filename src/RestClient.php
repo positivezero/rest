@@ -289,11 +289,22 @@ class RestClient implements \Iterator, \ArrayAccess {
 	}
 
 	public function format_query($parameters, $primary='=', $secondary='&'){
-		$query = "";
+		$queryParts = [];
 		foreach($parameters as $key => $value){
-			$pair = array(urlencode($key), urlencode($value));
-			$query .= implode($primary, $pair) . $secondary;
+			if(is_array($value)) { // -- recurse
+				$subParameters = [];
+				foreach($value as $subKey => $subValue) {
+					$newKey                 = $key.'['.$subKey.']';
+					$subParameters[$newKey] = $subValue;
+					$queryParts[]           = $this->format_query($subParameters, $primary, $secondary);
+				}
+			} else {
+				$pair         = array(urlencode($key), urlencode($value));
+				$queryParts[] = implode($primary, $pair);
+			}
 		}
+		$query = implode($secondary, $queryParts);
+
 		return rtrim($query, $secondary);
 	}
 
