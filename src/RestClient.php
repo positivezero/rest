@@ -234,14 +234,17 @@ class RestClient implements \Iterator, \ArrayAccess {
 		} else {
 			$parameters = array_merge($client->options['parameters'], $parameters);
 		}
+
+		$stringifiedParameters = (is_string($parameters) ? $parameters : $client->format_query($parameters));
 		if(in_array(strtoupper($method), array('POST', 'DELETE', 'PUT'))){
 			$curlopt['CURLOPT_CUSTOMREQUEST'] = strtoupper($method);
-			$curlopt['CURLOPT_POST'] = TRUE;
-			$curlopt['CURLOPT_POSTFIELDS'] = is_string($parameters) ? $parameters : $client->format_query($parameters);
+			$curlopt['CURLOPT_POST']          = TRUE;
+			$curlopt['CURLOPT_POSTFIELDS']    = $stringifiedParameters;
+			$client->payload                  = $stringifiedParameters;
 		}
 		elseif(count($parameters)){
-			$client->url .= strpos($client->url, '?')? '&' : '?';
-			$client->url .= is_string($parameters) ? $parameters : $client->format_query($parameters);
+			$client->url         .= (strpos($client->url, '?') ? '&' : '?').$stringifiedParameters;
+			$client->queryString  = $stringifiedParameters;
 		}
 
 		if($client->options['base_url']){
