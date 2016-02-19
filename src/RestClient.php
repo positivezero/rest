@@ -240,11 +240,9 @@ class RestClient implements \Iterator, \ArrayAccess {
 			$curlopt['CURLOPT_CUSTOMREQUEST'] = strtoupper($method);
 			$curlopt['CURLOPT_POST']          = TRUE;
 			$curlopt['CURLOPT_POSTFIELDS']    = $stringifiedParameters;
-			$client->payload                  = $stringifiedParameters;
 		}
 		elseif(count($parameters)){
 			$client->url         .= (strpos($client->url, '?') ? '&' : '?').$stringifiedParameters;
-			$client->queryString  = $stringifiedParameters;
 		}
 
 		if($client->options['base_url']){
@@ -266,8 +264,14 @@ class RestClient implements \Iterator, \ArrayAccess {
 		curl_setopt_array($client->handle, $curloptparsed);
 
 		$client->parse_response(curl_exec($client->handle));
-		$client->info = (object)curl_getinfo($client->handle);
 		$client->error = curl_error($client->handle);
+		$client->info  = (object)curl_getinfo($client->handle);
+		if(in_array(strtoupper($method), array('POST', 'DELETE', 'PUT'))) {
+			$client->info->payload = $stringifiedParameters;
+		} else {
+			$client->info->querystring = $stringifiedParameters;
+		}
+		$client->info->headers = $curlopt['CURLOPT_HTTPHEADER'];
 
 		curl_close($client->handle);
 
