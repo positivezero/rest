@@ -242,7 +242,7 @@ class RestClient implements \Iterator, \ArrayAccess {
 			$curlopt['CURLOPT_POSTFIELDS']    = $stringifiedParameters;
 		}
 		elseif(count($parameters)){
-			$client->url         .= (strpos($client->url, '?') ? '&' : '?').$stringifiedParameters;
+			$client->url .= (strpos($client->url, '?') ? '&' : '?').$stringifiedParameters;
 		}
 
 		if($client->options['base_url']){
